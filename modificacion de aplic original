@@ -1,0 +1,152 @@
+
+
+from sqlalchemy import create_engine, Column, Integer, String, Boolean
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+DATABASE_URL = "mysql+pymysql://biblioteca_user:password@localhost/biblioteca"
+
+engine = create_engine(DATABASE_URL, echo=False)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+class Libro(Base):
+    __tablename__ = 'libros'
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String(150), nullable=False)
+    autor = Column(String(100), nullable=False)
+    genero = Column(String(50))
+    leido = Column(Boolean, default=False)
+
+Base.metadata.create_all(bind=engine)
+
+class DBManager:
+    def __init__(self):
+        self.session = SessionLocal()
+
+    def agregar_libro(self, titulo, autor, genero, leido):
+        try:
+            leido_val = True if leido.lower() == 'leido' else False
+            libro = Libro(
+                titulo=titulo,
+                autor=autor,
+                genero=genero,
+                leido=leido_val
+            )
+            self.session.add(libro)
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"Error al agregar libro: {e}")
+            return False
+
+    def obtener_todos_libros(self):
+        return self.session.query(Libro).order_by(Libro.titulo).all()
+
+    def buscar_libros(self, campo, valor):
+        if campo == 'titulo':
+            return self.session.query(Libro).filter(Libro.titulo.like(f"%{valor}%")).all()
+        if campo == 'autor':
+            return self.session.query(Libro).filter(Libro.autor.like(f"%{valor}%")).all()
+        if campo == 'genero':
+            return self.session.query(Libro).filter(Libro.genero.like(f"%{valor}%")).all()
+        return []
+
+    def actualizar_libro(self, libro_id, campo, nuevo_valor):
+        libro = self.session.query(Libro).filter_by(id=libro_id).first()
+        if not libro:
+            return False
+
+        if campo == 'leido':
+            nuevo_valor = True if nuevo_valor.lower() in ('leido', 'si', '1') else False
+
+        setattr(libro, campo, nuevo_valor)
+        self.session.commit()
+        return True
+
+    def eliminar_libro(self, libro_id):
+        libro = self.session.query(Libro).filter_by(id=libro_id).first()
+        if not libro:
+            return False
+        self.session.delete(libro)
+        self.session.commit()
+        return True
+
+    def close(self):
+        self.session.close(
+
+def mostrar_libro(libro):
+    estado = "✅ Leído" if libro.leido else "❌ No Leído"
+    print(f"| {libro.id:<3} | {libro.titulo:<30} | {libro.autor:<20} | {libro.genero:<15} | {estado:<10} |")
+
+def mostrar_listado(libros):
+    if not libros:
+        print("\n--- No se encontraron libros registrados. ---")
+        return
+
+    print("\n" + "=" * 85)
+    print(f"| {'ID':<3} | {'TÍTULO':<30} | {'AUTOR':<20} | {'GÉNERO':<15} | {'ESTADO':<10} |")
+    print("=" * 85)
+    for libro in libros:
+        mostrar_libro(libro)
+    print("=" * 85)
+
+def mostrar_menu():
+    print("\n" + "=" * 30)
+    print("📚 BIBLIOTECA PERSONAL CLI")
+    print("=" * 30)
+    print("1. Agregar nuevo libro")
+    print("2. Actualizar información de un libro")
+    print("3. Eliminar libro existente")
+    print("4. Ver listado de libros")
+    print("5. Buscar libros")
+    print("6. Salir")
+    print("=" * 30)
+
+
+def main():
+    db_manager = DBManager()
+
+    while True:
+        mostrar_menu()
+        opcion = input("Seleccione una opción: ").strip()
+
+        if opcion == '1':
+            titulo = input("Título: ").strip()
+            autor = input("Autor: ").strip()
+            genero = input("Género: ").strip()
+            leido = input("Estado (Leído/No Leído): ").strip()
+            db_manager.agregar_libro(titulo, autor, genero, leido)
+
+        elif opcion == '2':
+            libro_id = int(input("ID del libro: "))
+            campo = input("Campo (titulo/autor/genero/leido): ").strip()
+            nuevo_valor = input("Nuevo valor: ").strip()
+            db_manager.actualizar_libro(libro_id, campo, nuevo_valor)
+
+        elif opcion == '3':
+            libro_id = int(input("ID del libro a eliminar: "))
+            db_manager.eliminar_libro(libro_id)
+
+        elif opcion == '4':
+            libros = db_manager.obtener_todos_libros()
+            mostrar_listado(libros)
+
+        elif opcion == '5':
+            campo = input("Buscar por (titulo/autor/genero): ").strip()
+            valor = input("Texto a buscar: ").strip()
+            libros = db_manager.buscar_libros(campo, valor)
+            mostrar_listado(libros)
+
+        elif opcion == '6':
+            print("\n👋 ¡Hasta pronto!")
+            db_manager.close()
+            break
+
+        else:
+            print("⚠️ Opción no válida")
+
+
+if __name__ == '__main__':
+    main()
